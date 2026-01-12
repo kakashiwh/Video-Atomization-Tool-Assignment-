@@ -8,7 +8,7 @@ export class AIService implements IAIService {
 
   constructor() {
     this.client = new AssemblyAI({
-      apiKey: process.env.ASSEMBLY_AI_KEY || "a7530c0e35c040169ba061e28305e970",
+      apiKey: process.env.ASSEMBLY_AI_KEY,
     });
     this.openrouter = new OpenRouter({
       apiKey: process.env.OPENROUTER_API_KEY
