@@ -1,0 +1,128 @@
+
+'use client';
+
+import { useState } from 'react';
+import { Upload, FileVideo, CheckCircle, AlertCircle } from 'lucide-react';
+
+export default function UploadArea() {
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0); // Mock progress for now
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+
+    setUploading(true);
+    setStatus('uploading');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+      const data = await response.json();
+      const videoId = data.videoId;
+
+      // Start Polling for status
+      await pollStatus(videoId);
+      
+    } catch (error) {
+      console.error(error);
+      setStatus('error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pollStatus = async (videoId: number) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/videos/${videoId}/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.status === 'completed') {
+          clearInterval(interval);
+          setStatus('success');
+          // Important: refresh the server components to show the new clips
+          window.location.reload(); 
+        } else if (data.status === 'error') {
+          clearInterval(interval);
+          setStatus('error');
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 2000);
+  };
+
+  return (
+    <div className="w-full max-w-xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-slate-200">
+      <div className="border-2 border-dashed border-slate-300 rounded-lg p-12 text-center hover:bg-slate-50 transition-colors">
+        <input 
+          type="file" 
+          accept="video/*" 
+          onChange={handleFileChange}
+          className="hidden" 
+          id="video-upload"
+        />
+        <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center gap-4">
+          <div className="bg-blue-50 p-4 rounded-full">
+            <Upload className="w-8 h-8 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Upload Video</h3>
+            <p className="text-slate-500 text-sm mt-1">MP4, MOV or WebM up to 500MB</p>
+          </div>
+        </label>
+      </div>
+
+      {file && (
+        <div className="mt-6 p-4 bg-slate-50 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <FileVideo className="w-5 h-5 text-blue-600" />
+                <div className="text-sm">
+                    <p className="font-medium text-slate-900">{file.name}</p>
+                    <p className="text-slate-500">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                </div>
+            </div>
+            {status === 'idle' && (
+                <button 
+                    onClick={handleUpload}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                >
+                    Start Processing
+                </button>
+            )}
+             {status === 'uploading' && (
+                <div className="text-blue-600 text-sm font-medium animate-pulse">Uploading...</div>
+            )}
+            {status === 'success' && (
+                <div className="flex items-center text-green-600 gap-2">
+                    <CheckCircle className="w-5 h-5" />
+                    <span className="text-sm font-medium">Uploaded</span>
+                </div>
+            )}
+             {status === 'error' && (
+                <div className="flex items-center text-red-600 gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    <span className="text-sm font-medium">Failed</span>
+                </div>
+            )}
+        </div>
+      )}
+    </div>
+  );
+}
