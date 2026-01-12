@@ -1,5 +1,5 @@
 
-import { pgTable, text, serial, timestamp, real, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, real, integer } from "drizzle-orm/pg-core";
 
 export const videos = pgTable("videos", {
   id: serial("id").primaryKey(),

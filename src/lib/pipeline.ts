@@ -1,43 +1,37 @@
-
-import { db } from "@/db";
-import { videos, clips } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { extractAudio, createClip, convertToVertical } from "./ffmpeg";
-import { transcribeAudio, analyzeTranscript, type Moment } from "./ai";
 import path from "path";
 import { UPLOAD_DIR } from "./constants";
+import { aiService } from "./ai";
+import { mediaProcessor } from "./ffmpeg";
+import { videoService } from "./services/videoService";
+import { clipService } from "./services/clipService";
+import { IAIService, IMediaProcessor } from "./types";
 
-
-export async function processVideoPipeline(videoId: number, videoPath: string) {
+export async function processVideoPipeline(
+    videoId: number, 
+    videoPath: string,
+    ai: IAIService = aiService,
+    processor: IMediaProcessor = mediaProcessor
+) {
     console.log(`[Pipeline] Starting for Video ${videoId}`);
     
     try {
         // 1. Update Status to Processing
-        await db.update(videos)
-            .set({ status: 'processing' })
-            .where(eq(videos.id, videoId));
+        await videoService.updateStatus(videoId, 'processing');
 
         const baseName = path.basename(videoPath, path.extname(videoPath));
-        console.log(`baseName: ${baseName}`);
-        console.log(`videoPath: ${videoPath}`);
         const audioPath = path.join(UPLOAD_DIR, `${baseName}.mp3`);
-        console.log(`audioPath: ${audioPath}`);
 
-        console.log(`before extract audio`);
         // 2. Extract Audio
         console.log(`[Pipeline] Extracting Audio...`);
-        await extractAudio(videoPath, audioPath);
+        await processor.extractAudio(videoPath, audioPath);
 
-        console.log(`after extract audio`);
         // 3. Transcribe
         console.log(`[Pipeline] Transcribing...`);
-        // Check if mock mode or real key exists. 
-        // For now trusting the key is there or it will fail nicely.
-        const transcript = await transcribeAudio(audioPath);
+        const transcript = await ai.transcribe(audioPath);
         
         // 4. Analyze Moments
         console.log(`[Pipeline] Analyzing Transcript...`);
-        const moments = await analyzeTranscript(transcript);
+        const moments = await ai.analyze(transcript);
         console.log(`[Pipeline] Found ${moments.length} moments`);
 
         // 5. Generate Clips
@@ -48,49 +42,26 @@ export async function processVideoPipeline(videoId: number, videoPath: string) {
             // Generate Horizontal Clip
             const horizontalFilename = `${baseName}_clip_${safeTitle}_16x9.mp4`;
             const horizontalPath = path.join(UPLOAD_DIR, horizontalFilename);
-            await createClip(videoPath, moment.startTime, moment.endTime, horizontalPath);
+            await processor.createClip(videoPath, moment.startTime, moment.endTime, horizontalPath);
 
             // Save Horizontal Clip to DB
-            await db.insert(clips).values({
-                videoId,
-                title: moment.title,
-                summary: moment.summary,
-                startTime: moment.startTime,
-                endTime: moment.endTime,
-                filePath: horizontalFilename, // Store relative path/filename
-                orientation: 'horizontal'
-            });
+            await clipService.createClip(videoId, moment, horizontalFilename, 'horizontal');
 
             // Generate Vertical Clip
             const verticalFilename = `${baseName}_clip_${safeTitle}_9x16.mp4`;
             const verticalPath = path.join(UPLOAD_DIR, verticalFilename);
-            await convertToVertical(horizontalPath, verticalPath);
+            await processor.convertToVertical(horizontalPath, verticalPath);
 
             // Save Vertical Clip to DB
-            await db.insert(clips).values({
-                videoId,
-                title: `${moment.title} (Vertical)`,
-                summary: moment.summary,
-                startTime: moment.startTime,
-                endTime: moment.endTime,
-                filePath: verticalFilename,
-                orientation: 'vertical'
-            });
+            await clipService.createClip(videoId, moment, verticalFilename, 'vertical');
         }
 
-        // 6. Cleanup & Complete
-        // Optional: Delete audio file? await fs.unlink(audioPath);
-        
-        await db.update(videos)
-            .set({ status: 'completed' })
-            .where(eq(videos.id, videoId));
-            
+        // 6. Complete
+        await videoService.updateStatus(videoId, 'completed');
         console.log(`[Pipeline] Completed Video ${videoId}`);
 
     } catch (error) {
         console.error(`[Pipeline] Error for Video ${videoId}:`, error);
-        await db.update(videos)
-            .set({ status: 'error' })
-            .where(eq(videos.id, videoId));
+        await videoService.updateStatus(videoId, 'error');
     }
 }

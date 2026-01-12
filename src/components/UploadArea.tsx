@@ -90,37 +90,39 @@ export default function UploadArea() {
       </div>
 
       {file && (
-        <div className="mt-6 p-4 bg-slate-50 rounded-lg flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <FileVideo className="w-5 h-5 text-blue-600" />
-                <div className="text-sm">
-                    <p className="font-medium text-slate-900">{file.name}</p>
+        <div className="mt-6 p-4 bg-slate-50 rounded-lg flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+                <FileVideo className="w-5 h-5 text-blue-600 shrink-0" />
+                <div className="text-sm min-w-0">
+                    <p className="font-medium text-slate-900 truncate" title={file.name}>{file.name}</p>
                     <p className="text-slate-500">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
                 </div>
             </div>
-            {status === 'idle' && (
-                <button 
-                    onClick={handleUpload}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-                >
-                    Start Processing
-                </button>
-            )}
-             {status === 'uploading' && (
-                <div className="text-blue-600 text-sm font-medium animate-pulse">Uploading...</div>
-            )}
-            {status === 'success' && (
-                <div className="flex items-center text-green-600 gap-2">
-                    <CheckCircle className="w-5 h-5" />
-                    <span className="text-sm font-medium">Uploaded</span>
-                </div>
-            )}
-             {status === 'error' && (
-                <div className="flex items-center text-red-600 gap-2">
-                    <AlertCircle className="w-5 h-5" />
-                    <span className="text-sm font-medium">Failed</span>
-                </div>
-            )}
+            <div className="shrink-0">
+              {status === 'idle' && (
+                  <button 
+                      onClick={handleUpload}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition whitespace-nowrap"
+                  >
+                      Start Processing
+                  </button>
+              )}
+               {status === 'uploading' && (
+                  <div className="text-blue-600 text-sm font-medium animate-pulse whitespace-nowrap">Uploading...</div>
+              )}
+              {status === 'success' && (
+                  <div className="flex items-center text-green-600 gap-2 whitespace-nowrap">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="text-sm font-medium">Uploaded</span>
+                  </div>
+              )}
+               {status === 'error' && (
+                  <div className="flex items-center text-red-600 gap-2 whitespace-nowrap">
+                      <AlertCircle className="w-5 h-5" />
+                      <span className="text-sm font-medium">Failed</span>
+                  </div>
+              )}
+            </div>
         </div>
       )}
     </div>

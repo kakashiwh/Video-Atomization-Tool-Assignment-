@@ -4,7 +4,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { db } from '@/db';
 import { videos } from '@/db/schema';
-import { UPLOAD_DIR } from '@/lib/constants';
+import { UPLOAD_DIR, MAX_FILE_SIZE, ACCEPTED_VIDEO_TYPES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { processVideoPipeline } from '@/lib/pipeline';
 
@@ -18,6 +18,15 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    }
+
+    // Validation
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File too large' }, { status: 400 });
+    }
+
+    if (!ACCEPTED_VIDEO_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());

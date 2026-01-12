@@ -1,37 +1,31 @@
 import { AssemblyAI } from "assemblyai";
 import { OpenRouter } from "@openrouter/sdk";
+import { IAIService, Moment } from "./types";
 
+export class AIService implements IAIService {
+  private client: AssemblyAI;
+  private openrouter: OpenRouter;
 
-const openrouter = new OpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY
-});
+  constructor() {
+    this.client = new AssemblyAI({
+      apiKey: process.env.ASSEMBLY_AI_KEY || "a7530c0e35c040169ba061e28305e970",
+    });
+    this.openrouter = new OpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY
+    });
+  }
 
-const client = new AssemblyAI({
-  apiKey: process.env.ASSEMBLYAI_API_KEY,
-});
+  async transcribe(audioPath: string): Promise<string> {
+    const params = {
+      audio: audioPath,
+      speech_models: ["universal"],
+    };
 
-export async function transcribeAudio(audioPath: string): Promise<any> {
- const audioFile = audioPath;
+    const transcript = await this.client.transcripts.transcribe(params);
+    return transcript.text || "";
+  }
 
-const params = {
-  audio: audioFile,
-  speech_models: ["universal"],
-};
-
-
-  const transcript = await client.transcripts.transcribe(params);
-
-return transcript.text
-}
-
-export interface Moment {
-    title: string;
-    startTime: number; // seconds
-    endTime: number; // seconds
-    summary: string;
-}
-
-export async function analyzeTranscript(transcript: string): Promise<Moment[]> {
+  async analyze(transcript: string): Promise<Moment[]> {
     const prompt = `This is a transcript of a video. Identify 3-5 key moments or interesting segments that would make good short clips.
     Return ONLY a JSON array of objects with the following structure:
     [
@@ -44,50 +38,49 @@ export async function analyzeTranscript(transcript: string): Promise<Moment[]> {
     ]
     
     Transcript:
-    ${transcript.substring(0, 50000)}`
+    ${transcript.substring(0, 50000)}`;
 
     try {
-        // Using OpenRouter SDK as requested
-       const stream = await openrouter.chat.send({
-  model: "mistralai/devstral-2512:free",
-  messages: [
-    {
-      "role": "user",
-      "content": prompt
-        
-    }
-  ],
-  stream: true
-});
+      const stream = await this.openrouter.chat.send({
+        model: "mistralai/devstral-2512:free",
+        messages: [
+          {
+            "role": "user",
+            "content": prompt
+          }
+        ],
+        stream: true
+      });
 
-let content = "";
-for await (const chunk of stream) {
-   content += chunk.choices[0]?.delta?.content;
- }
+      let content = "";
+      for await (const chunk of stream) {
+        content += chunk.choices[0]?.delta?.content;
+      }
 
-    console.log("Full AI response:", content);
+      console.log("Full AI response:", content);
 
-    // Clean possible code fences / whitespace
-    const cleaned = content
-      .replace(/^```json\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
+      const cleaned = content
+        .replace(/^```json\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
 
-    const parsed = JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned);
 
-    if (Array.isArray(parsed)) {
-      return parsed as Moment[];
-    }
+      if (Array.isArray(parsed)) {
+        return parsed as Moment[];
+      }
 
-    // Fallback: sometimes model wraps it
-    if (parsed.moments && Array.isArray(parsed.moments)) {
-      return parsed.moments;
-    }
+      if (parsed.moments && Array.isArray(parsed.moments)) {
+        return parsed.moments;
+      }
 
-    console.warn("Response was not an array:", parsed);
-    return [];
+      console.warn("Response was not an array:", parsed);
+      return [];
     } catch (e) {
-        console.error("Failed to parse AI response or OpenRouter error", e);
-        return [];
+      console.error("Failed to parse AI response or OpenRouter error", e);
+      return [];
     }
+  }
 }
+
+export const aiService = new AIService();
