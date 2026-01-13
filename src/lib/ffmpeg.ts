@@ -48,13 +48,31 @@ export class FFmpegProcessor implements IMediaProcessor {
     sourcePath: string,
     startTime: number,
     endTime: number,
-    outputPath: string
+    outputPath: string,
+    subtitlePath?: string
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const duration = endTime - startTime;
-      ffmpeg(sourcePath)
+      let command = ffmpeg(sourcePath)
         .setStartTime(startTime)
-        .duration(duration)
+        .duration(duration);
+
+      if (subtitlePath) {
+        // For Windows, paths in the subtitles filter need special escaping
+        const escapedSubPath = subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:');
+        
+        // Use PTS shift instead of seek_point for better compatibility
+        // 1. Shift PTS forward so the first frame matches the SRT timestamp
+        // 2. Apply subtitles (it will find the entry at original video time)
+        // 3. Shift PTS back so the output file starts at 0
+        command = command.videoFilters([
+          `setpts=PTS+${startTime}/TB`,
+          `subtitles=f='${escapedSubPath}'`,
+          `setpts=PTS-STARTPTS`
+        ]);
+      }
+
+      command
         .output(outputPath)
         .on('end', () => resolve())
         .on('error', (err) => reject(err))
@@ -62,10 +80,35 @@ export class FFmpegProcessor implements IMediaProcessor {
     });
   }
 
-  async convertToVertical(inputPath: string, outputPath: string): Promise<void> {
+  async createVerticalClip(
+    sourcePath: string,
+    startTime: number,
+    endTime: number,
+    outputPath: string,
+    subtitlePath?: string
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoFilters('crop=ih*9/16:ih:iw/2-(ih*9/16)/2:0')
+      const duration = endTime - startTime;
+      let command = ffmpeg(sourcePath)
+        .setStartTime(startTime)
+        .duration(duration);
+
+      const cropFilter = 'crop=ih*9/16:ih:iw/2-(ih*9/16)/2:0';
+
+      if (subtitlePath) {
+        const escapedSubPath = subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:');
+        
+        command = command.videoFilters([
+          cropFilter,
+          `setpts=PTS+${startTime}/TB`,
+          `subtitles=f='${escapedSubPath}':force_style='FontSize=16,MarginV=140'`, 
+          `setpts=PTS-STARTPTS`
+        ]);
+      } else {
+        command = command.videoFilters(cropFilter);
+      }
+
+      command
         .output(outputPath)
         .on('end', () => resolve())
         .on('error', (err) => reject(err))

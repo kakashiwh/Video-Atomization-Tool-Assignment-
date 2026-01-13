@@ -30,6 +30,21 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    
+    // Compute MD5 hash for smart caching
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('md5').update(buffer).digest('hex');
+
+    // Check for existing completed video with same hash
+    const existingVideo = await db.query.videos.findFirst({
+        where: (videos, { eq, and }) => and(eq(videos.hash, hash), eq(videos.status, 'completed'))
+    });
+
+    if (existingVideo) {
+        console.log(`[Cache] Found existing video for hash ${hash}. Returning original ID ${existingVideo.id}`);
+        return NextResponse.json({ success: true, videoId: existingVideo.id, cached: true });
+    }
+
     const uniqueId = uuidv4();
     const extension = path.extname(file.name);
     const filename = `${uniqueId}${extension}`;
@@ -43,6 +58,7 @@ export async function POST(request: NextRequest) {
       title: file.name,
       filename: filename,
       originalName: file.name,
+      hash: hash,
       status: 'uploaded', // Initial status
     }).returning();
 

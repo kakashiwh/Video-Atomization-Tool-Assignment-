@@ -1,108 +1,119 @@
+# Video Atomization Tool - Technical Documentation
 
-# Video Atomization Tool
-
-A Next.js application that automatically transforms long-form videos into short, shareable clips using AI and FFmpeg.
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js 18+
-- Docker & Docker Compose
-- FFmpeg (installed on host)
-- OpenAI API Key
-
-### Setup
-
-1.  **Clone & Install**
-    ```bash
-    npm install
-    ```
-
-2.  **Environment Setup**
-    Copy `.env` and fill in your keys:
-    ```bash
-    cp .env.example .env.local
-    ```
-    Required keys:
-    - `DATABASE_URL`: Postgres connection string
-    - `OPENAI_API_KEY`: For Whisper and GPT-4o
-
-3.  **Start Database (Local)**
-    ```bash
-    docker-compose up -d
-    npx drizzle-kit push
-    ```
-
-4.  **Run Development Server**
-    ```bash
-    npm run dev
-    ```
-    Open [http://localhost:3000](http://localhost:3000).
+This document provides a deep dive into the architecture, setup, and features of the Video Atomization Tool.
 
 ## 🏗 System Architecture
 
-### Core Pipeline
-1.  **Upload**: Video is uploaded to `/public/uploads`.
-2.  **Preprocessing**: Audio is extracted using `fluent-ffmpeg`.
-3.  **Intelligence**:
-    -   **Whisper API** generates a transcript.
-    -   **GPT-4o** analyzes text to find 3-5 key "moments" (viral topics).
-4.  **Atomization**:
-    -   Clips are cut based on timestamps.
-    -   Vertical (9:16) versions are automatically cropped from the center.
-5.  **Persistence**: Metadata (videos, clips) stored in Postgres via Drizzle ORM.
+The project is built with a **SOLID-compliant architecture**, separating concerns into specialized services.
 
-### Tech Stack
--   **Framework**: Next.js 15 (App Router)
--   **Database**: Postgres (local Docker) + Drizzle ORM
--   **Video**: FFmpeg (system binary + node wrappers)
--   **AI**: OpenAI Node SDK
+### 🧩 Core Components
 
-## 🤖 AI Usage Policy
+- **Frontend**: Next.js 15 (App Router) with Tailwind CSS for a modern, responsive UI.
+- **Database**: PostgreSQL with **Drizzle ORM** for type-safe schema and query management.
+- **Processing Pipeline**: An asynchronous orchestration layer that coordinates audio extraction, AI analysis, and video processing.
 
-This project utilized AI assistants (Gemini/Claude) for:
--   **Boilerplate**: Initial Next.js structure and Tailwind components.
--   **FFmpeg Commands**: Generating complex `crop` filters for vertical video.
--   **React Components**: generating the Upload and List UI.
--   **Debugging**: Solving Docker networking issues and TS types.
+### 🛠 Refactored Service Layer (SOLID)
 
-## 📝 Design Decisions
+We refactored the codebase to adhere to the Dependency Inversion Principle using the following structure:
 
--   **Local Storage**: For MVP simplicity, files are stored locally in `public/uploads`. In production, this would be S3/R2.
--   **Async Processing**: The pipeline is triggered asynchronously to avoid blocking the HTTP response, though for a robust production app, a queue (BullMQ) is recommended.
--   **Drizzle ORM**: Chosen for type safety and lightweight execution compared to Prisma.
+- **`VideoService`**: Handles all metadata operations for the main video entries.
+- **`ClipService`**: Manages the persistence and retrieval of generated clips.
+- **`AIService`**: Implements `IAIService`. Decouples the application from specific AI providers. Currently uses **AssemblyAI** (Transcription) and **OpenRouter/Mistral** (Moment Analysis).
+- **`FFmpegProcessor`**: Implements `IMediaProcessor`. Wraps complex FFmpeg logic for extraction, clipping, and vertical conversion.
 
-## License
-MIT
+---
 
- rm -Force -Recurse .next; npm install; npm run dev
+## 🚀 Setup Instructions
 
- Here is how to run the project successfully:
+### Prerequisites
+- **Node.js**: 18.x or higher
+- **Docker** or **Neon (PostgreSQL)**: For running the PostgreSQL database  
+- **FFmpeg**: Must be available on the system path (or provided by `ffmpeg-static`)
 
-1. Prerequisites
-Ensure you have Docker Desktop installed and running.
+### Environment Variables
+Store these in a `.env` file at the root:
 
-2. Environment Setup
-You need to create a .env file in the video-atomizer directory with the following content: (I have already created a template for you, but please verify the API key)
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/video_atomizer"
+REDIS_URL="redis://localhost:6379"
+ASSEMBLY_AI_KEY="your_assembly_ai_key"
+OPENROUTER_API_KEY="your_openrouter_key"
+```
 
-env
-DATABASE_URL="postgres://postgres:password@localhost:5432/video_atomizer"
-OPENAI_API_KEY="sk-proj-..."
-3. Start Database & Push Schema
-Open your terminal in video-atomizer and run:
+### Installation & Initialization
 
-powershell
-docker-compose up -d
-$env:DATABASE_URL='postgres://postgres:password@localhost:5432/video_atomizer'; npx drizzle-kit push
-(Note: We set the env var explicitly for the push command because correct loading from .env sometimes varies by shell)
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-4. Run the Application
-powershell
-npm run dev
-Then open http://localhost:3000.
+2. **Start the database**:
+   ```bash
+   docker-compose up -d
+   ``` 
+   or
 
-Status:
+   if you have Neon (PostgreSQL) link just paste that in the DATABASE_URL in .env file
 
-Database: Running (Docker)
-Server: Running (I just verified it starts locally)
-Pipeline: Ready (API Configured)
+3. **Push the database schema**:
+   ```bash
+   npx drizzle-kit push
+   ```
+
+4. **Run development server**:
+   ```bash
+   npm run dev
+   ```
+   if Any error occurs just run (it might occur due to tailwindcss)
+   ```bash
+   rm -Force -Recurse .next; npm install; npm run dev
+   ```
+
+---
+
+## 🤖 AI Usage & Implementation
+
+### 1. Transcription (AssemblyAI)
+The system uses AssemblyAI for high-accuracy audio-to-text conversion. 
+- **Subtitles**: We generate `.srt` files alongside the text to enable burned-in captions.
+
+### 2. Moment Detection (OpenRouter / Mistral)
+The transcript is analyzed by LLMs (Mistral 7B via OpenRouter) to identify "viral moments". 
+- **Criteria**: The AI looks for high-impact segments with clear start/end points.
+- **Auto-titles**: Engaging, SEO-friendly titles are generated for each clip automatically.
+
+---
+
+## 💾 Database Schema
+
+The system uses two primary tables:
+
+### `videos`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | serial | Primary Key |
+| title | text | Original filename |
+| filename | text | Stored unique filename |
+| status | text | uploaded, processing, completed, error |
+| hash | text | MD5 content hash for **Smart Caching** |
+
+### `clips`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | serial | Primary Key |
+| videoId | integer | Foreign Key to `videos` |
+| title | text | AI-generated title |
+| startTime | real | Start offset in seconds |
+| endTime | real | End offset in seconds |
+| filePath | text | Path to the generated `.mp4` |
+| orientation | text | horizontal or vertical |
+
+---
+
+## ✨ Features Implemented
+
+1.  **AI-Generated Titles**: Every clip is assigned a catchy title by the LLM.
+2.  **Burned-in Captions**: Subtitles are automatically generated from transcript timestamps and hard-coded into the video clips using FFmpeg filters.
+3.  **Smart Caching**: The system computes a content hash (MD5) for every upload. If the same file has been processed before, it immediately returns the original results, saving time and API costs.
+4.  **Real-time Updates (Redis Pub/Sub)**: Replaced polling with a robust event-driven architecture. Status updates are published to Redis and streamed to the frontend via Server-Sent Events (SSE).
+5.  **Auto-Refresh**: Background synchronization ensures the UI stays updated if files are manually deleted from the server.

@@ -35,8 +35,14 @@ export default function UploadArea() {
       const data = await response.json();
       const videoId = data.videoId;
 
-      // Start Polling for status
-      await pollStatus(videoId);
+      if (data.cached) {
+        setStatus('success');
+        window.location.reload();
+        return;
+      }
+
+      // Start Listening for status updates via Redis Pub/Sub
+      startListening(videoId);
       
     } catch (error) {
       console.error(error);
@@ -46,26 +52,29 @@ export default function UploadArea() {
     }
   };
 
-  const pollStatus = async (videoId: number) => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/videos/${videoId}/status`);
-        if (!res.ok) return;
-        const data = await res.json();
-        
-        if (data.status === 'completed') {
-          clearInterval(interval);
-          setStatus('success');
-          // Important: refresh the server components to show the new clips
-          window.location.reload(); 
-        } else if (data.status === 'error') {
-          clearInterval(interval);
-          setStatus('error');
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
+  const startListening = (videoId: number) => {
+    const eventSource = new EventSource(`/api/videos/${videoId}/events`);
+    
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.status === 'processing') {
+        setStatus('uploading'); // Or keep as is
+      } else if (data.status === 'completed') {
+        eventSource.close();
+        setStatus('success');
+        window.location.reload();
+      } else if (data.status === 'error') {
+        eventSource.close();
+        setStatus('error');
       }
-    }, 2000);
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("EventSource error:", err);
+      eventSource.close();
+    };
+
+    // Return cleanup function if needed, but here it's managed internally
   };
 
   return (

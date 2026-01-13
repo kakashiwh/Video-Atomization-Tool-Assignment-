@@ -11,18 +11,25 @@ export class AIService implements IAIService {
       apiKey: process.env.ASSEMBLY_AI_KEY!,
     });
     this.openrouter = new OpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY
+      apiKey: process.env.OPENROUTER_API_KEY!
     });
   }
 
-  async transcribe(audioPath: string): Promise<string> {
+  async transcribe(audioPath: string): Promise<{ text: string, srt: string }> {
     const params = {
       audio: audioPath,
       speech_models: ["universal"],
     };
 
     const transcript = await this.client.transcripts.transcribe(params);
-    return transcript.text || "";
+    
+    // Fetch SRT subtitles
+    const srt = await this.client.transcripts.subtitles(transcript.id, 'srt');
+    
+    return { 
+      text: transcript.text || "", 
+      srt: srt || "" 
+    };
   }
 
   async analyze(transcript: string): Promise<Moment[]> {

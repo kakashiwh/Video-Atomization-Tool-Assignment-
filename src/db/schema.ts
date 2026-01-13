@@ -8,6 +8,7 @@ export const videos = pgTable("videos", {
   originalName: text("original_name"),
   duration: real("duration"),
   status: text("status").default("uploaded").notNull(), // uploaded, processing, completed, error
+  hash: text("hash"), // Content hash for caching
   createdAt: timestamp("created_at").defaultNow(),
 });
 
