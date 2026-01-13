@@ -1,10 +1,9 @@
 import Redis from 'ioredis';
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisUrl = process.env.REDIS_URL! ;
 
 class RedisService {
   private static instance: Redis;
-  private static subscriberInstance: Redis;
 
   static getClient() {
     if (!this.instance) {
