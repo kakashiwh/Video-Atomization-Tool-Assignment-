@@ -61,15 +61,14 @@ export class FFmpegProcessor implements IMediaProcessor {
         // For Windows, paths in the subtitles filter need special escaping
         const escapedSubPath = subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:');
         
-        // Use PTS shift instead of seek_point for better compatibility
-        // 1. Shift PTS forward so the first frame matches the SRT timestamp
-        // 2. Apply subtitles (it will find the entry at original video time)
-        // 3. Shift PTS back so the output file starts at 0
         command = command.videoFilters([
           `setpts=PTS+${startTime}/TB`,
-          `subtitles=f='${escapedSubPath}'`,
-          `setpts=PTS-STARTPTS`
+          `subtitles=f='${escapedSubPath}':force_style='Alignment=2,FontSize=24,Outline=2,Shadow=2,MarginV=40'`,
+          `setpts=PTS-STARTPTS`,
+          `setsar=1`
         ]);
+      } else {
+        command = command.videoFilters(`setsar=1`);
       }
 
       command
@@ -93,19 +92,32 @@ export class FFmpegProcessor implements IMediaProcessor {
         .setStartTime(startTime)
         .duration(duration);
 
-      const cropFilter = 'crop=ih*9/16:ih:iw/2-(ih*9/16)/2:0';
+      // 1. Crop original video to 9:16 center
+      const cropFilter = `crop=ih*9/16:ih:(iw-ih*9/16)/2:0`;
 
       if (subtitlePath) {
         const escapedSubPath = subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:');
         
+        // Filter order is CRITICAL for vertical captions:
+        // 1. Crop and scale to final 9:16 vertical resolution (720x1280)
+        // 2. Shift PTS to match global SRT timing
+        // 3. Apply subtitles (now they wrap correctly for 720px width)
+        // 4. Shift PTS back for zero-start output
+        // 5. Force square pixels (setsar=1) to prevent stretching
         command = command.videoFilters([
           cropFilter,
+          `scale=720:1280`,
           `setpts=PTS+${startTime}/TB`,
-          `subtitles=f='${escapedSubPath}':force_style='FontSize=16,MarginV=140'`, 
-          `setpts=PTS-STARTPTS`
+          `subtitles=f='${escapedSubPath}':force_style='Alignment=2,FontSize=28,Outline=2,Shadow=2,MarginV=120'`, 
+          `setpts=PTS-STARTPTS`,
+          `setsar=1`
         ]);
       } else {
-        command = command.videoFilters(cropFilter);
+        command = command.videoFilters([
+          cropFilter,
+          `scale=720:1280`,
+          `setsar=1`
+        ]);
       }
 
       command
