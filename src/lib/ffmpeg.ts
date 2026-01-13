@@ -106,9 +106,9 @@ export class FFmpegProcessor implements IMediaProcessor {
         // 5. Force square pixels (setsar=1) to prevent stretching
         command = command.videoFilters([
           cropFilter,
-          `scale=720:1280`,
+          `scale=1080:1920`,
           `setpts=PTS+${startTime}/TB`,
-          `subtitles=f='${escapedSubPath}':force_style='Alignment=2,FontSize=28,Outline=2,Shadow=2,MarginV=120'`, 
+          `subtitles=f='${escapedSubPath}':force_style='Alignment=5,FontSize=28,Outline=2,Shadow=2,MarginV=120'`, 
           `setpts=PTS-STARTPTS`,
           `setsar=1`
         ]);
