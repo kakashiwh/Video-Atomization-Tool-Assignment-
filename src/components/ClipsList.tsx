@@ -1,6 +1,5 @@
 
 import { getRecentClips } from '@/actions/clips';
-import { Play } from 'lucide-react';
 
 export default async function ClipsList() {
   const clips = await getRecentClips();

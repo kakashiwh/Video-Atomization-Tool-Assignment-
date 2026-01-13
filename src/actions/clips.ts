@@ -3,7 +3,7 @@
 
 import { db } from "@/db";
 import { clips, videos } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 
 import { UPLOAD_DIR } from "@/lib/constants";
 import fs from "fs/promises";

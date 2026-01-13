@@ -1,7 +1,6 @@
 
 import UploadArea from '@/components/UploadArea';
 import ClipsList from '@/components/ClipsList';
-import AutoRefresh from '@/components/AutoRefresh';
 
 export default function Home() {
   return (
@@ -21,7 +20,6 @@ export default function Home() {
             <h2 className="text-xl font-semibold text-slate-900 mb-6">Recent Clips</h2>
             <ClipsList />
         </div>
-        <AutoRefresh interval={15000} />
       </div>
     </main>
   );
