@@ -90,6 +90,7 @@ The current architecture is perfect for an MVP or medium-scale use. To scale to 
 From: Running the pipeline as a background function call.
 To: Passing a "job" to a persistent queue (like BullMQ or Temporal).
 Because we already use Redis, this transition would be straightforward. The API would push a job to Redis, and a dedicated "Worker" fleet (independent of the web server) would pick it up and process it.
+
 ---
 
 ---
