@@ -2,25 +2,6 @@
 
 This document provides a deep dive into the architecture, setup, and features of the Video Atomization Tool.
 
-## 🏗 System Architecture
-
-The project is built with a **SOLID-compliant architecture**, separating concerns into specialized services.
-
-### 🧩 Core Components
-
-- **Frontend**: Next.js 15 (App Router) with Tailwind CSS for a modern, responsive UI.
-- **Database**: PostgreSQL with **Drizzle ORM** for type-safe schema and query management.
-- **Processing Pipeline**: An asynchronous orchestration layer that coordinates audio extraction, AI analysis, and video processing.
-
-### 🛠 Refactored Service Layer (SOLID)
-
-We refactored the codebase to adhere to the Dependency Inversion Principle using the following structure:
-
-- **`VideoService`**: Handles all metadata operations for the main video entries.
-- **`ClipService`**: Manages the persistence and retrieval of generated clips.
-- **`AIService`**: Implements `IAIService`. Decouples the application from specific AI providers. Currently uses **AssemblyAI** (Transcription) and **OpenRouter/Mistral** (Moment Analysis).
-- **`FFmpegProcessor`**: Implements `IMediaProcessor`. Wraps complex FFmpeg logic for extraction, clipping, and vertical conversion.
-
 ---
 
 ## 🚀 Setup Instructions
@@ -71,16 +52,60 @@ OPENROUTER_API_KEY="your_openrouter_key"
 
 ---
 
-## 🤖 AI Usage & Implementation
 
-### 1. Transcription (AssemblyAI)
-The system uses AssemblyAI for high-accuracy audio-to-text conversion. 
-- **Subtitles**: We generate `.srt` files alongside the text to enable burned-in captions.
+## 🏗 System Architecture & Design Rationale
 
-### 2. Moment Detection (OpenRouter / Mistral)
-The transcript is analyzed by LLMs (Mistral 7B via OpenRouter) to identify "viral moments". 
-- **Criteria**: The AI looks for high-impact segments with clear start/end points.
-- **Auto-titles**: Engaging, SEO-friendly titles are generated for each clip automatically.
+The Video Atomization Tool is designed with a **decoupled, service-oriented architecture**. We prioritize user experience (UX) through real-time feedback and developer maintainability through clean abstraction layers.
+
+### 1. Why This Architecture?
+
+#### Decoupled Processing Pipeline
+Video editing (FFmpeg) and AI analysis (Transcription) are heavy, long-running tasks.
+- **Decision**: We handle uploads via a fast API response, then trigger the processing pipeline in the background.
+- **Benefit**: Prevents browser timeouts and allows the server to process complex tasks without blocking new user requests.
+
+#### Redis Pub/Sub + Server-Sent Events (SSE)
+Real-time feedback is critical for long-running tasks.
+- **Implementation**: 
+    - **The Publisher**: `pipeline.ts` emits status changes to a specific Redis channel.
+    - **The Subscriber**: An API route (`/api/videos/[id]/events`) listens to Redis and streams messages to the client using SSE.
+- **Why Redis?**: It's extremely low-latency for signaling and allows for easy horizontal scaling (Workers and the Web API can run on different servers).
+- **Why SSE?**: Simpler than WebSockets for one-way server-to-client updates.
+
+#### Layered Service Architecture (`src/lib/services`)
+We separated concerns into `VideoService`, `ClipService`, `AIService`, and `FFmpegProcessor`.
+- **The Rationale**: This allows us to swap components (e.g., switching from AssemblyAI to Whisper) by changing a single class implementation rather than the core business logic.
+
+### 2. Trade-offs and Assumptions
+
+| Trade-off | Description |
+| :--- | :--- |
+| **Redis Pub/Sub vs. Polling** | **Pro**: Instant updates, reduced DB load. **Con**: If the client disconnects briefly, missed "middle" status updates aren't replayed (fire-and-forget). |
+| **Monolithic vs. Microservices** | **Pro**: Single codebase is easier to deploy and manage for MVP. **Con**: CPU-heavy FFmpeg processes share the same resources as the web server. |
+| **SSE vs. WebSockets** | **Pro**: Direct browser support, automatic reconnection. **Con**: Uni-directional only (which fits our "status update" use case perfectly). |
+
+### 3.  Future Scaling Path (The "Work Queue" Shift)
+The current architecture is perfect for an MVP or medium-scale use. To scale to thousands of users, we would make one major change:
+
+From: Running the pipeline as a background function call.
+To: Passing a "job" to a persistent queue (like BullMQ or Temporal).
+Because we already use Redis, this transition would be straightforward. The API would push a job to Redis, and a dedicated "Worker" fleet (independent of the web server) would pick it up and process it.
+---
+
+---
+
+## 🤖 AI API Selection & Rationale
+
+We utilize two distinct AI providers to power the intelligence of this tool. The primary driver for these choices was **accessibility**—specifically the availability of generous free tiers and easy-to-use API keys for development and testing.
+
+### 1. Transcription & Subtitles (AssemblyAI)
+- **Use Case**: Converting video audio into high-accuracy text and generating synchronized `.srt` subtitle files.
+- **Why AssemblyAI?**: It provides a specialized, production-ready speech-to-text API that includes subtitle generation out of the box. Its free tier allows for extensive testing without upfront credit card requirements.
+
+### 2. Segment Analysis (Mistral / devstral via OpenRouter)
+- **Use Case**: Analyzing the transcript to identify "viral" moments and generating catchy titles/summaries.
+- **Why Mistral?**: By using **OpenRouter**, we gain access to the `mistralai/devstral-2512:free` model. 
+- **Rationale for skipping OpenAI/Gemini/Claude**: While models like GPT-4 or Gemini are powerful, they often require a paid subscription or have complex free-tier restrictions that limit immediate developer testing. **Mistral via OpenRouter** provides a high-quality, free-to-use alternative that allows any developer to clone this repo and start testing immediately.
 
 ---
 
