@@ -93,8 +93,6 @@ Because we already use Redis, this transition would be straightforward. The API 
 
 ---
 
----
-
 ## 🤖 AI API Selection & Rationale
 
 We utilize two distinct AI providers to power the intelligence of this tool. The primary driver for these choices was **accessibility**—specifically the availability of generous free tiers and easy-to-use API keys for development and testing.
